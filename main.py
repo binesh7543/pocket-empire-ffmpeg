@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 import uvicorn
@@ -14,7 +15,16 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await ptb_app.initialize()
+    for attempt in range(3):
+        try:
+            await ptb_app.initialize()
+            break
+        except Exception as e:
+            logger.warning(f"Telegram init attempt {attempt+1} failed: {e}")
+            if attempt == 2:
+                raise
+            await asyncio.sleep(3)
+
     await ptb_app.start()
     if WEBHOOK_URL:
         clean_url = WEBHOOK_URL.rstrip('/')
@@ -38,7 +48,7 @@ async def webhook(request: Request):
         logger.error(f"Webhook processing error: {e}")
         return {"status": "error", "message": str(e)}
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def index():
     return {"status": "CutX Bot is Running online!"}
 
